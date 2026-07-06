@@ -11,18 +11,21 @@ either an owner/Atlas-team decision or a follow-up sprint. Updated 2026-07-06.
 | **1**  | Deterministic CI/tests                   | ✅ catalog fixture, live-fetch disabled in tests, nightly delisting check               |
 | **2**  | Codex OAuth                              | ✅ hardened refresh/device/browser flows; discoverable in the auth wizard               |
 | **3**  | Atlas sync correctness                   | ✅ shell-export precedence (no billing flip), atomic writes, torn-file tolerance + test |
-| **5**  | UX polish                                | ◑ transition typos fixed; real error states land with WS4/WS8 frontend                  |
+| **4**  | Browser onboarding                       | ✅ browser Atlas login (`/account/login-key` + SetupDialog) + no-model dead-end killed  |
+| **5**  | UX polish                                | ✅ transition typos + real file error states (retry on read/permission/listing failure) |
 | **6**  | Compute / atlas version                  | ✅ `@synsci/atlas` `^0.5.12` → `^0.13.2` (managed compute resolves)                     |
 | **7**  | Atlas experience — **A1 unified status** | ✅ `openscience status` = connection + plan + wallet + usage + compute + companion      |
-| **8**  | Wallet backend                           | ✅ `getCredits`/`getTransactions` + `/settings/wallet` (Atlas contract verified live)   |
+| **8**  | Wallet (backend + panel)                 | ✅ `/settings/wallet` + Wallet panel; routes verified live, UI typecheck-only           |
 | **9**  | arXiv retrieval                          | ✅ throttle, PDF/error parsing, graceful degrade, 20 tests (merged)                     |
 | **11** | Reviewer gate                            | ✅ Level 0 annotate-only, code-level, flag-gated (`experimental.reviewGate`)            |
 | —      | Atlas repo rebrand + sync-hash parity    | ✅ draft PR `synthetic-sciences/atlas#188`                                              |
 | —      | >60-min hang fix                         | ✅ all Atlas calls timeout-bounded; verified fail-fast e2e                              |
 
-In flight when this was written: **WS4** (browser Atlas login + SetupDialog) and
-**WS8 frontend** (Wallet panel) + **WS5** error states — one agent branch,
-`sprint/ws4-ws8-frontend`.
+WS4/WS5/WS8 are now merged into `sprint/openscience-atlas-polish` (PR #94). The WS8
+`/settings/wallet` and WS4 `/account/login-key` routes are runtime-verified against
+the live backend; the WS4/WS8 **frontend UI** (Wallet panel render, SetupDialog
+click-through) is typecheck-verified but not yet exercised in a live browser
+session — the one remaining verification gap.
 
 ## Deferred — needs owner sign-off
 
