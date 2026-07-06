@@ -130,7 +130,11 @@ export const Storage: Component = () => {
           <div style={{ border: "1px solid var(--color-border)", "border-radius": "4px", padding: "16px 18px" }}>
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div class="flex flex-col gap-1 min-w-0">
-                <span class="text-13-regular text-text-strong truncate" style={{ "font-family": FONT_CODE }}>
+                <span
+                  class="text-13-regular text-text-strong truncate"
+                  style={{ "font-family": FONT_CODE }}
+                  title={usage()?.data_dir}
+                >
                   {usage()?.data_dir ?? "…"}
                 </span>
                 <span class="text-12-regular text-text-weak">
