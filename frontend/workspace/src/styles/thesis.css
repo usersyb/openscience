@@ -137,6 +137,14 @@
   outline-offset: 2px;
 }
 
+/* The composer shows its own soft focus-within ring, so the textarea inside it
+   doesn't need the hard keyboard outline stacked on top (textareas match
+   :focus-visible even on mouse focus, which is what read as a harsh border). */
+.g-composer textarea:focus,
+.g-composer textarea:focus-visible {
+  outline: none !important;
+}
+
 /* The old light-mode "cream neutralisation" remap block is gone: the default
    openscience theme now ships the product's neutral greys directly, so the ui
    semantic layer needs no app-side patching (and non-default themes render
@@ -247,16 +255,16 @@ html[data-color-scheme="dark"] .g-strip {
 .g-composer {
   background: var(--color-surface-solid);
   border: 1px solid var(--color-border);
-  border-radius: 4px;
+  border-radius: 14px;
   transition:
     border-color 120ms ease,
     box-shadow 160ms ease;
   box-shadow: var(--shadow-xs);
 }
 .g-composer:focus-within {
-  border-color: var(--color-focus);
+  border-color: var(--color-border-strong);
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--color-focus) 15%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--color-focus) 10%, transparent),
     var(--shadow-xs);
 }
 

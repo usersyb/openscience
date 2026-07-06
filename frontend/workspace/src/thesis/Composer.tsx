@@ -927,9 +927,11 @@ export function Composer(): JSX.Element {
               ? "var(--color-border-strong)"
               : "var(--color-border)",
           "box-shadow":
-            dragOver() || focused() ? "0 0 0 3px var(--color-accent-subtle), var(--shadow-xs)" : "var(--shadow-xs)",
+            dragOver() || focused()
+              ? "0 0 0 4px color-mix(in srgb, var(--color-focus) 10%, transparent), var(--shadow-xs)"
+              : "var(--shadow-xs)",
           background: dragOver() ? "var(--color-accent-subtle)" : "var(--color-surface-solid)",
-          "border-radius": "4px",
+          "border-radius": "14px",
           transition: "background 120ms ease, box-shadow 120ms ease, border-color 120ms ease",
         }}
       >
