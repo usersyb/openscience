@@ -87,6 +87,20 @@ export namespace Provider {
     return typeof baseURL === "string" && baseURL.includes("/api/llm/proxy/")
   }
 
+  // Explicit apiKey for a provider routed through the Atlas managed proxy: force
+  // the session thk_ token. These SDKs read `<PROVIDER>_API_KEY` straight from
+  // env, so a shell `export OPENAI_API_KEY=sk-...` would otherwise shadow the
+  // managed token and 401 the proxy ("thk_* token not found"). Returns {} unless
+  // both managed spend is on AND the baseURL is the Atlas proxy — genuine BYOK
+  // (no proxy URL) is untouched and hits the provider directly.
+  async function managedProxyKey(baseURL: unknown): Promise<{ apiKey?: string }> {
+    const managed =
+      isAtlasProxyBaseURL(baseURL) && (await Config.get().catch(() => undefined))?.billing?.llm === "managed"
+    if (!managed) return {}
+    const session = await OpenScience.getSession().catch(() => null)
+    return session?.api_key ? { apiKey: session.api_key } : {}
+  }
+
   function requireAtlasProxyForManagedKey(provider: Info, options: Record<string, any>) {
     // Key off the EFFECTIVE credential, not raw env. A managed thk_ value can
     // sit unused in env while an auth.json key wins resolution; demanding
@@ -148,7 +162,7 @@ export namespace Provider {
       return {
         autoload: false,
         options: {
-          ...(baseURL ? { baseURL } : {}),
+          ...(baseURL ? { baseURL, ...(await managedProxyKey(baseURL)) } : {}),
           headers: {
             "anthropic-beta":
               "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
@@ -185,7 +199,7 @@ export namespace Provider {
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
           return sdk.responses(modelID)
         },
-        options: baseURL ? { baseURL } : {},
+        options: baseURL ? { baseURL, ...(await managedProxyKey(baseURL)) } : {},
       }
     },
     "github-copilot": async () => {
@@ -391,7 +405,7 @@ export namespace Provider {
       return {
         autoload: false,
         options: {
-          ...(baseURL ? { baseURL } : {}),
+          ...(baseURL ? { baseURL, ...(await managedProxyKey(baseURL)) } : {}),
           headers: {
             "HTTP-Referer": "https://syntheticsciences.ai/",
             "X-Title": "synsci",
@@ -584,7 +598,7 @@ export namespace Provider {
       const baseURL = Env.get("GOOGLE_GENERATIVE_AI_BASE_URL") ?? Env.get("GEMINI_BASE_URL")
       return {
         autoload: false,
-        options: baseURL ? { baseURL } : {},
+        options: baseURL ? { baseURL, ...(await managedProxyKey(baseURL)) } : {},
       }
     },
   }
