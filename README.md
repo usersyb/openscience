@@ -47,7 +47,7 @@ The command is `openscience`, and it opens the workspace in your browser. The fi
 npx synsci
 ```
 
-Platform binaries are also attached to [GitHub Releases](https://github.com/synthetic-sciences/OpenScience/releases).
+Platform binaries are also attached to [GitHub Releases](https://github.com/synthetic-sciences/OpenScience/releases); see the [changelog](CHANGELOG.md) for what's new in each version.
 
 ## Quickstart
 
