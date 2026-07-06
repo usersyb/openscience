@@ -468,7 +468,7 @@ export function FilePreview(props: { path: string; onClose: () => void }): JSX.E
           "backdrop-filter": "blur(2px)",
           "z-index": 90,
           opacity: mounted() ? 1 : 0,
-          transition: "opacity 1120ms ease",
+          transition: "opacity 120ms ease",
         }}
       />
       <div

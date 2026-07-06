@@ -430,7 +430,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
               // Slight desaturation while loading hints at activity without
               // unmounting the rows — feels much smoother than a full swap.
               opacity: entries.loading ? 0.55 : 1,
-              transition: "opacity 1120ms ease",
+              transition: "opacity 120ms ease",
             }}
           >
             {/* Thin indeterminate loading bar across the top while fetching. */}
