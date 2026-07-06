@@ -95,3 +95,37 @@ export function xmlAttr(xml: string, tag: string, attr: string): string | undefi
   const m = new RegExp(`<${tag}\\b[^>]*?\\b${attr}="([^"]*)"`).exec(xml)
   return m ? decodeEntities(m[1]) : undefined
 }
+
+/** A single self-closing element: its (entity-decoded) attributes plus raw text. */
+export interface SelfClosing {
+  attrs: Record<string, string>
+  raw: string
+}
+
+/**
+ * Every self-closing `<tag … />` element with its attributes.
+ *
+ * `xmlBlocks` only matches paired `<tag>…</tag>` elements, so self-closing tags
+ * (Atom `<link …/>`, `<category …/>`) are invisible to it — a trap, because
+ * `xmlAttr` DOES match a self-closing opening. This closes the gap: it returns
+ * each occurrence's attributes as a map, letting callers select by any attribute
+ * (e.g. arXiv's `title="pdf"` link) regardless of attribute order.
+ */
+export function xmlSelfClosing(xml: string, tag: string): SelfClosing[] {
+  const re = new RegExp(`<${tag}\\b([^>]*?)/\\s*>`, "g")
+  const out: SelfClosing[] = []
+  for (let m = re.exec(xml); m !== null; m = re.exec(xml)) {
+    out.push({ attrs: parseAttrs(m[1]), raw: m[0] })
+  }
+  return out
+}
+
+/** Parse a run of `key="value"` attribute pairs into an entity-decoded map. */
+function parseAttrs(input: string): Record<string, string> {
+  const attrs: Record<string, string> = {}
+  const re = /([\w:.-]+)\s*=\s*"([^"]*)"/g
+  for (let m = re.exec(input); m !== null; m = re.exec(input)) {
+    attrs[m[1]] = decodeEntities(m[2])
+  }
+  return attrs
+}
