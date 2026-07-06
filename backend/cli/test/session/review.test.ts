@@ -40,3 +40,23 @@ describe("SessionReview.reviewerFor", () => {
     expect(SessionReview.reviewerFor("something-else")).toBe("critique")
   })
 })
+
+describe("SessionReview.shouldReview — boundaries", () => {
+  test("respects the minimum-length gate", () => {
+    // Below the length floor is skipped even with a checkable fact present...
+    expect(SessionReview.shouldReview({ agent: "research", text: "acc 0.9 in run.py" })).toBe(false)
+    // ...and a long answer carrying an artifact path qualifies.
+    const long = "a".repeat(399) + " results/run.ipynb"
+    expect(SessionReview.shouldReview({ agent: "research", text: long })).toBe(true)
+  })
+
+  test("triggers on a file:line citation", () => {
+    const text = "The traceback originates in the loader — see file:42 for the exact frame. ".repeat(7)
+    expect(SessionReview.shouldReview({ agent: "ml", text })).toBe(true)
+  })
+
+  test("triggers on a bare numeric claim, not only on file paths", () => {
+    const text = "The measured effect held at 42 across every condition we swept in the study. ".repeat(7)
+    expect(SessionReview.shouldReview({ agent: "biology", text })).toBe(true)
+  })
+})
