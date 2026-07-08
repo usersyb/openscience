@@ -176,6 +176,96 @@ test("enabled_providers restricts to only listed providers", async () => {
   })
 })
 
+test("openrouter with a BYOK env key routes to public OpenRouter with that key", async () => {
+  await using tmp = await tmpdir({})
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("OPENROUTER_API_KEY", "sk-or-user-byok")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["openrouter"]).toBeDefined()
+      expect(providers["openrouter"].options["apiKey"]).toBe("sk-or-user-byok")
+      expect(providers["openrouter"].options["baseURL"]).toBe("https://openrouter.ai/api/v1")
+    },
+  })
+})
+
+test("a BYOK openrouter key overrides a lingering synced proxy base URL (no misroute)", async () => {
+  await using tmp = await tmpdir({})
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("OPENROUTER_API_KEY", "sk-or-user-byok")
+      // A proxy base URL left in env from a prior managed session must NOT
+      // capture the user's own key — the resolver pins it to public OpenRouter.
+      Env.set("OPENROUTER_BASE_URL", "https://thesis-synsc.fly.dev/api/llm/proxy/openrouter/v1")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["openrouter"].options["apiKey"]).toBe("sk-or-user-byok")
+      expect(providers["openrouter"].options["baseURL"]).toBe("https://openrouter.ai/api/v1")
+    },
+  })
+})
+
+test("openrouter BYOK honours a custom (non-Atlas) OPENROUTER_BASE_URL gateway", async () => {
+  await using tmp = await tmpdir({})
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("OPENROUTER_API_KEY", "sk-or-user-byok")
+      // A user's own OpenRouter-compatible gateway — must be preserved, not
+      // forced to public openrouter.ai (only the Atlas proxy is swapped out).
+      Env.set("OPENROUTER_BASE_URL", "https://my-gateway.example/api/v1")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["openrouter"].options["apiKey"]).toBe("sk-or-user-byok")
+      expect(providers["openrouter"].options["baseURL"]).toBe("https://my-gateway.example/api/v1")
+    },
+  })
+})
+
+test("openrouter on a BYOK key ignores the managed whitelist and shows the full catalog", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      // The curated managed whitelist binds only the managed route.
+      provider: { openrouter: { whitelist: ["deepseek/deepseek-r1"] } },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("OPENROUTER_API_KEY", "sk-or-user-byok")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["openrouter"]).toBeDefined()
+      // BYOK ⇒ whitelist skipped ⇒ far more than the single whitelisted model.
+      expect(Object.keys(providers["openrouter"].models).length).toBeGreaterThan(1)
+    },
+  })
+})
+
+test("google forwards a GOOGLE_API_KEY alias to the SDK apiKey (SDK only reads GOOGLE_GENERATIVE_AI_API_KEY)", async () => {
+  await using tmp = await tmpdir({})
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      // Detected from the alias, but @ai-sdk/google won't auto-load it — the
+      // loader must forward it or calls fail with "API key is missing".
+      Env.set("GOOGLE_API_KEY", "AIza-google-alias")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["google"]).toBeDefined()
+      expect(providers["google"].options["apiKey"]).toBe("AIza-google-alias")
+    },
+  })
+})
+
 test("model whitelist filters models for provider", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
