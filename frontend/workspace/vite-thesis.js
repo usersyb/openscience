@@ -2,7 +2,7 @@ import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { dirname, join } from "node:path"
 import { homedir } from "node:os"
-import { readFileSync } from "node:fs"
+import { readFileSync, realpathSync } from "node:fs"
 import { createHash } from "node:crypto"
 
 /**
@@ -180,6 +180,100 @@ async function commitNewNode(input) {
   return { node_id: nodeID(data), raw: data }
 }
 
+// ── per-folder project resolution (mirrors atlas-bridge.ts) ────────────────
+function projectIdOf(data) {
+  const p = Array.isArray(data?.projects) ? data.projects[0] : undefined
+  return p?.project_id ?? p?.id ?? p?.node_id ?? data?.project_id ?? data?.id ?? null
+}
+
+async function repoTop(directory) {
+  const top = await git(["rev-parse", "--show-toplevel"], directory).catch(() => "")
+  if (!top) return directory
+  try {
+    return realpathSync(top)
+  } catch {
+    return top
+  }
+}
+
+// Must match computeDedupeKey() in atlas-bridge.ts so dev + prod resolve the
+// SAME Atlas project for a given repo/folder.
+function computeDedupeKey(directory, repoUrl) {
+  if (repoUrl) {
+    try {
+      const u = new URL(repoUrl)
+      const segments = u.pathname
+        .replace(/^\/+/, "")
+        .replace(/\.git$/, "")
+        .split("/")
+      const owner = segments.shift()
+      const name = segments.join("/")
+      if (owner && name) return `repo:${u.hostname}/${owner}/${name}`
+    } catch {}
+  }
+  try {
+    return `local-folder:${realpathSync(directory)}`
+  } catch {
+    return `local-folder:${directory}`
+  }
+}
+
+async function resolveProjectId(directory) {
+  if (!directory) return null
+  try {
+    const root = await repoTop(directory)
+    const ctx = await repoContext(root)
+    const key = computeDedupeKey(root, ctx.repo_url)
+    const data = await atlasFetch("GET", `/api/agent/projects?dedupe_key=${encodeURIComponent(key)}`)
+    return projectIdOf(data)
+  } catch {
+    return null
+  }
+}
+
+// Find-or-create the opened folder's Atlas project (mirrors initProjectDetailed):
+// resolve first, else the /api/agent/projects endpoint, else a dedupe-tagged root
+// node via commit-new. Returns { project_id } or { project_id: null, error, message }.
+async function initProject(directory) {
+  if (!directory) return { project_id: null, error: "backend", message: "no directory provided" }
+  if (!sessionToken()) return { project_id: null, error: "unauthenticated", message: "run `openscience login`" }
+  const existing = await resolveProjectId(directory)
+  if (existing) return { project_id: existing }
+  const root = await repoTop(directory)
+  const ctx = await repoContext(root)
+  const key = computeDedupeKey(root, ctx.repo_url)
+  const name = root.split("/").filter(Boolean).pop() || "project"
+  try {
+    const data = await atlasFetch("POST", "/api/agent/projects", {
+      title: name,
+      dedupe_key: key,
+      repo_url: ctx.repo_url ?? undefined,
+      branch_name: ctx.branch_name ?? undefined,
+    })
+    const id = projectIdOf(data)
+    if (id) return { project_id: id }
+  } catch {
+    /* fall through to the commit-new fallback */
+  }
+  try {
+    const { node_id } = await commitNewNode({
+      localID: `local-project-${hash(key)}`,
+      parentIDs: [],
+      title: `Project: ${name}`,
+      kind: "insight",
+      summary: `Atlas research-graph root for ${name}.`,
+      hypothesis: "",
+      content: "",
+      reason: "Initialized as this repo's Atlas research-graph root.",
+      context: { ...ctx, external_transcript_ref: `atlas-project-dedupe:${key}` },
+    })
+    if (node_id) return { project_id: node_id }
+  } catch (e) {
+    return { project_id: null, error: "backend", message: String(e?.message ?? e) }
+  }
+  return { project_id: null, error: "backend", message: "projects endpoint returned no project id" }
+}
+
 const GITHUB = {
   status: () => atlasFetch("GET", "/api/v1/auth/github/status"),
   refresh: () => atlasFetch("POST", "/api/v1/auth/github/refresh-repos", {}),
@@ -189,9 +283,12 @@ const GITHUB = {
 async function handle(req, res) {
   const path = (req.url || "/").split("?")[0].replace(/^\/+/, "")
   const method = req.method || "GET"
+  const query = new URLSearchParams((req.url || "").split("?")[1] || "")
   const cacheKey = `${method} ${req.url}`
+  // /project resolution must never serve a stale null across an init — resolve fresh.
+  const cacheable = method === "GET" && path !== "project"
 
-  if (method === "GET") {
+  if (cacheable) {
     const hit = cache.get(cacheKey)
     if (hit && Date.now() - hit.at < CACHE_TTL_MS) {
       return send(res, hit.status, hit.body)
@@ -238,6 +335,12 @@ async function handle(req, res) {
       return send(res, 200, await GITHUB.disconnect())
     } else if (method === "GET" && path === "health") {
       return send(res, 200, { ok: !!sessionToken() })
+    } else if (method === "GET" && path === "project") {
+      // Resolve the opened folder's Atlas project (find-only).
+      body = JSON.stringify({ project_id: await resolveProjectId(query.get("directory") || "") })
+    } else if (method === "POST" && path === "project/init") {
+      // Find-or-create the opened folder's Atlas project graph.
+      return send(res, 200, await initProject(query.get("directory") || ""))
     } else {
       // Mirror the backend bridge's `.all("/*") → 200 {}`: quietly answer any
       // other path the SPA probes (e.g. GET /project for a folder with no linked
@@ -246,7 +349,7 @@ async function handle(req, res) {
       return send(res, 200, {})
     }
 
-    if (method === "GET") cache.set(cacheKey, { at: Date.now(), body, status: 200 })
+    if (cacheable) cache.set(cacheKey, { at: Date.now(), body, status: 200 })
     return send(res, 200, body)
   } catch (e) {
     return send(res, 502, { error: "atlas request failed", detail: String(e?.message ?? e) })
