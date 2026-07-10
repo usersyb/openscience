@@ -380,6 +380,23 @@ export namespace SessionProcessor {
                   ) {
                     needsCompaction = true
                   }
+                  // A "length" finish with an over-threshold token count is NOT a
+                  // finished answer — the turn was truncated mid-thought (often right
+                  // before a tool call, leaving a pending tool part). isContinuing()
+                  // excludes "length", so the block above skips it. Treat it as a
+                  // context overflow: compact history and re-run the SAME user message
+                  // against the summary, instead of exiting the loop as if the agent
+                  // was done (which strands the pending tool part → "Tool execution
+                  // aborted"). A genuine max-output truncation (small input) has
+                  // isOverflow=false and still falls through unchanged.
+                  if (
+                    !input.assistantMessage.summary &&
+                    value.finishReason === "length" &&
+                    (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model }))
+                  ) {
+                    overflow = true
+                    input.assistantMessage.finish = "compact"
+                  }
                   break
 
                 case "text-start":
@@ -440,7 +457,7 @@ export namespace SessionProcessor {
                   })
                   continue
               }
-              if (needsCompaction) break
+              if (needsCompaction || overflow) break
             }
           } catch (e: any) {
             log.error("process", {
@@ -507,7 +524,9 @@ export namespace SessionProcessor {
                 state: {
                   ...part.state,
                   status: "error",
-                  error: "Tool execution aborted",
+                  error: overflow
+                    ? "Model output was truncated before the tool call completed (context limit); no action was taken. Compacting and retrying."
+                    : "Tool execution aborted",
                   time: {
                     start: Date.now(),
                     end: Date.now(),
