@@ -338,12 +338,16 @@ export namespace SessionPrompt {
 
       let lastUser: MessageV2.User | undefined
       let lastAssistant: MessageV2.Assistant | undefined
+      let lastAssistantMsg: MessageV2.WithParts | undefined
       let lastFinished: MessageV2.Assistant | undefined
       let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
       for (let i = msgs.length - 1; i >= 0; i--) {
         const msg = msgs[i]
         if (!lastUser && msg.info.role === "user") lastUser = msg.info as MessageV2.User
-        if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info as MessageV2.Assistant
+        if (!lastAssistant && msg.info.role === "assistant") {
+          lastAssistant = msg.info as MessageV2.Assistant
+          lastAssistantMsg = msg
+        }
         if (!lastFinished && msg.info.role === "assistant" && msg.info.finish)
           lastFinished = msg.info as MessageV2.Assistant
         if (lastUser && lastFinished) break
@@ -410,11 +414,15 @@ export namespace SessionPrompt {
         return true
       }
       const bareMode = lastUser.tools?.["*"] === false
-      if (
-        lastAssistant?.finish &&
-        (!MessageV2.isContinuing(lastAssistant.finish) || bareMode) &&
-        lastUser.id < lastAssistant.id
-      ) {
+      // A finish of "unknown" is only ambiguous — treated as "keep going" — when the
+      // turn actually made a tool call whose result must be fed back. A text-only
+      // turn that finished "unknown" (common with local Ollama models) produced no
+      // continuation signal; re-prompting the identical context just yields the same
+      // text forever (the #176 doom loop). Treat it as a completed turn instead.
+      const lastAssistantHasTool = lastAssistantMsg?.parts.some((p) => p.type === "tool") ?? false
+      const continuing =
+        MessageV2.isContinuing(lastAssistant?.finish) && (lastAssistant?.finish !== "unknown" || lastAssistantHasTool)
+      if (lastAssistant?.finish && (!continuing || bareMode) && lastUser.id < lastAssistant.id) {
         log.info("exiting loop", { sessionID, bareMode })
         // RSI: capture trajectory from ultra agent sessions (async, non-blocking)
         if (lastUser.agent && RSITrajectory.ARTIFACT_AGENTS.includes(lastUser.agent as any)) {
